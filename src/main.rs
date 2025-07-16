@@ -83,11 +83,20 @@ fn main() {
     });
 
     println!("Got config - {}", config);
-    run(config);
+    if let Err(e) = run(config) {
+        println!("Application error: {e}");
+        process::exit(1);
+    }
 }
 
-fn run(config: Config) {
+fn run(config: Config) -> Result<(), Box<dyn Error>> {
     println!("Running!");
-    thread::sleep(Duration::from_secs(config.get_ready.into()));
+    start_timer(config.get_ready.into())?;
     println!("Done sleeping");
+    Ok(())
+}
+
+fn start_timer(sleep_secs: u64) -> Result<(), Box<dyn Error>> {
+    thread::sleep(Duration::from_secs(sleep_secs));
+    Ok(())
 }
