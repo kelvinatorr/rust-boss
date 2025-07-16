@@ -1,5 +1,7 @@
 use std::error::Error;
 use std::fmt;
+use std::thread;
+use std::time::Duration;
 use std::{env, num::ParseIntError, process, str::ParseBoolError};
 
 #[derive(Debug)]
@@ -27,34 +29,25 @@ impl From<ParseBoolError> for ArgParseError {
 }
 impl Error for ArgParseError {}
 
-fn main() {
-    println!("Rust Implementation Of Interval Boss");
-    let args: Vec<String> = env::args().collect();
-
-    let config = Config::build(&args).unwrap_or_else(|err| {
-        println!("Problem parsing arguments: {}", err.msg);
-        process::exit(1);
-    });
-
-    println!("Get ready is {}", config.get_ready);
-    println!("First timer is {}", config.first_timer);
-    println!("Second timer is {}", config.second_timer);
-    println!("Rounds is {}", config.rounds);
-    println!("One shot is {}", config.one_shot);
-
-    run(config);
-}
-
-fn run(_config: Config) {
-    println!("Running!");
-}
-
 struct Config {
     get_ready: u32,
     first_timer: u32,
     second_timer: u32,
     rounds: u16,
     one_shot: bool,
+}
+impl fmt::Display for Config {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Get Ready: {} | First Timer: {} | Second Timer: {} | Round: {} | One Shot: {}",
+            self.get_ready,
+            self.first_timer,
+            self.second_timer,
+            self.rounds,
+            self.one_shot
+        )
+    }
 }
 
 impl Config {
@@ -78,4 +71,23 @@ impl Config {
             one_shot,
         })
     }
+}
+
+fn main() {
+    println!("Rust Implementation Of Interval Boss");
+    let args: Vec<String> = env::args().collect();
+
+    let config = Config::build(&args).unwrap_or_else(|err| {
+        println!("Problem parsing arguments: {}", err.msg);
+        process::exit(1);
+    });
+
+    println!("Got config - {}", config);
+    run(config);
+}
+
+fn run(config: Config) {
+    println!("Running!");
+    thread::sleep(Duration::from_secs(config.get_ready.into()));
+    println!("Done sleeping");
 }
