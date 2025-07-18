@@ -2,7 +2,8 @@ use std::{env, process};
 
 use rustboss::Config;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("Rust Implementation Of Interval Boss");
     let args: Vec<String> = env::args().collect();
 
@@ -12,9 +13,12 @@ fn main() {
     });
 
     println!("Got config - {}", config);
-    if let Err(e) = rustboss::run(config) {
+
+    if let Err(e) = rustboss::run(config).await {
         println!("Application error: {e}");
         process::exit(1);
     }
+    crossterm::terminal::disable_raw_mode().unwrap();
+    process::exit(0);
 }
 

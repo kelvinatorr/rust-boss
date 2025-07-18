@@ -1,8 +1,10 @@
+use crossterm::event::{self, Event, KeyCode};
+use signal_hook::{consts::SIGHUP, iterator::Signals};
 use std::error::Error;
 use std::fmt;
-use std::thread;
 use std::time::Duration;
 use std::{num::ParseIntError, str::ParseBoolError};
+use tokio::time;
 
 #[derive(Debug)]
 pub struct ArgParseError {
@@ -41,11 +43,7 @@ impl fmt::Display for Config {
         write!(
             f,
             "Get Ready: {} | First Timer: {} | Second Timer: {} | Round: {} | One Shot: {}",
-            self.get_ready,
-            self.first_timer,
-            self.second_timer,
-            self.rounds,
-            self.one_shot
+            self.get_ready, self.first_timer, self.second_timer, self.rounds, self.one_shot
         )
     }
 }
@@ -73,14 +71,52 @@ impl Config {
     }
 }
 
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
     println!("Running!");
-    start_timer(config.get_ready.into())?;
-    println!("Done sleeping");
-    Ok(())
-}
 
-fn start_timer(sleep_secs: u64) -> Result<(), Box<dyn Error>> {
-    thread::sleep(Duration::from_secs(sleep_secs));
+    let sleep_secs: u64 = config.get_ready.into();
+    let timer = tokio::spawn(async move {
+        time::sleep(Duration::from_secs(sleep_secs)).await;
+    });
+    println!("Done starting timer");
+
+    let sig_listener = tokio::spawn(async {
+        let mut signals = Signals::new([SIGHUP]).unwrap();
+        for sig in signals.forever() {
+            println!("Received signal {:?}", sig);
+            return;
+        }
+    });
+
+    let keeb_listener = tokio::spawn(async {
+        crossterm::terminal::enable_raw_mode().unwrap();
+        loop {
+            if let Event::Key(key_event) = event::read().unwrap() {
+                match key_event.code {
+                    KeyCode::Char(' ') => {
+                        println!("Got space...");
+                        break;
+                    }
+                    _ => {
+                        // Handle all other keys
+                        println!("You pressed another key.");
+                    }
+                }
+            }
+        }
+        crossterm::terminal::disable_raw_mode().unwrap();
+    });
+
+    tokio::select! {
+        _ = timer => {
+            println!("Done sleeping");
+        }
+        _ = sig_listener => {
+            println!("sig_listener returned");
+        }
+        _ = keeb_listener => {
+            println!("keeb_listener returned");
+        }
+    }
     Ok(())
 }
