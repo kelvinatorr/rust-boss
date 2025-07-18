@@ -71,14 +71,46 @@ impl Config {
     }
 }
 
-pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    println!("Running!");
+#[derive(Debug)]
+struct Timer {
+    duration: u64,
+    // finish_sound: String
+}
 
-    let sleep_secs: u64 = config.get_ready.into();
+impl Timer {
+    async fn start(&self) {
+        if self.duration == 0 {
+            return;
+        }
+        time::sleep(Duration::from_secs(self.duration)).await;
+    }
+
+    fn pause(&self) {
+        dbg!("Pause called on {}", self);
+    }
+}
+
+pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    dbg!("Running!");
+
+    // Create timers
+    let gr_timer = Timer {
+        duration: config.get_ready.into(),
+    };
+    let first_timer = Timer {
+        duration: config.first_timer.into(),
+    };
+    let second_timer = Timer {
+        duration: config.second_timer.into(),
+    };
+    // Put in vector
+    let timers = vec![gr_timer, first_timer, second_timer];
+
+    // Run each one in sequence
     let timer = tokio::spawn(async move {
-        time::sleep(Duration::from_secs(sleep_secs)).await;
+        run_timers(timers).await;
     });
-    println!("Done starting timer");
+    dbg!("Done starting timer");
 
     let sig_listener = tokio::spawn(async {
         let mut signals = Signals::new([SIGHUP]).unwrap();
@@ -94,12 +126,12 @@ pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
             if let Event::Key(key_event) = event::read().unwrap() {
                 match key_event.code {
                     KeyCode::Char(' ') => {
-                        println!("Got space...");
+                        dbg!("Got space...");
                         break;
                     }
                     _ => {
                         // Handle all other keys
-                        println!("You pressed another key.");
+                        dbg!("You pressed another key.");
                     }
                 }
             }
@@ -109,14 +141,22 @@ pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     tokio::select! {
         _ = timer => {
-            println!("Done sleeping");
+            dbg!("Done sleeping");
         }
         _ = sig_listener => {
-            println!("sig_listener returned");
+            dbg!("sig_listener returned");
         }
         _ = keeb_listener => {
-            println!("keeb_listener returned");
+            dbg!("keeb_listener returned");
         }
     }
     Ok(())
+}
+
+async fn run_timers(timers: Vec<Timer>) {
+    for t in &timers {
+        println!("starting {t:?}");
+        t.start().await;
+        println!("finished {t:?}");
+    }
 }
