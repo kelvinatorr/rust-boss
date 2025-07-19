@@ -4,7 +4,8 @@ use std::error::Error;
 use std::fmt;
 use std::time::Duration;
 use std::{num::ParseIntError, str::ParseBoolError};
-use tokio::time;
+use tokio::sync::mpsc::Receiver;
+use tokio::{sync, time};
 
 #[derive(Debug)]
 pub struct ArgParseError {
@@ -73,19 +74,35 @@ impl Config {
 
 #[derive(Debug)]
 struct Timer {
-    duration: u64,
+    duration_ms: u64,
+    elapsed_time_ms: u64,
     // finish_sound: String
 }
 
 impl Timer {
-    async fn start(&self) {
-        if self.duration == 0 {
+    fn new(duration: u64) -> Self {
+        let duration_ms = duration * 1000;
+        Self {
+            duration_ms,
+            elapsed_time_ms: duration_ms,
+        }
+    }
+    async fn start(&mut self) {
+        if self.duration_ms == 0 {
             return;
         }
-        time::sleep(Duration::from_secs(self.duration)).await;
+
+        let mut interval = time::interval(Duration::from_millis(1));
+        loop {
+            interval.tick().await;
+            self.elapsed_time_ms -= 1;
+            if self.elapsed_time_ms == 0 {
+                break;
+            }
+        }
     }
 
-    fn pause(&self) {
+    fn toggle_pause(&self) {
         dbg!("Pause called on {}", self);
     }
 }
@@ -93,24 +110,20 @@ impl Timer {
 pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
     dbg!("Running!");
 
-    // Create timers
-    let gr_timer = Timer {
-        duration: config.get_ready.into(),
-    };
-    let first_timer = Timer {
-        duration: config.first_timer.into(),
-    };
-    let second_timer = Timer {
-        duration: config.second_timer.into(),
-    };
-    // Put in vector
-    let timers = vec![gr_timer, first_timer, second_timer];
+    let mut paused = false;
 
-    // Run each one in sequence
-    let timer = tokio::spawn(async move {
-        run_timers(timers).await;
-    });
-    dbg!("Done starting timer");
+    // Create timers
+    let gr_timer = Timer::new(config.get_ready.into());
+    // let first_timer = Timer::new(config.first_timer.into());
+    // let second_timer = Timer::new(config.second_timer.into());
+    // Put in vector
+    // let mut timers = vec![gr_timer, first_timer, second_timer];
+    let mut timers = vec![gr_timer];
+
+    let (pause_tx, pause_rx) = sync::mpsc::channel(1);
+    let pause_tx2 = pause_tx.clone();
+
+    dbg!("Done starting timers");
 
     let sig_listener = tokio::spawn(async {
         let mut signals = Signals::new([SIGHUP]).unwrap();
@@ -140,23 +153,35 @@ pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
     });
 
     tokio::select! {
-        _ = timer => {
+        _ = run_timers(&mut timers, pause_rx) => {
             dbg!("Done sleeping");
         }
         _ = sig_listener => {
             dbg!("sig_listener returned");
+            paused = !paused;
+            pause_tx.send(paused).await.unwrap();
         }
         _ = keeb_listener => {
             dbg!("keeb_listener returned");
+            paused = !paused;
+            pause_tx2.send(paused).await.unwrap();
         }
     }
     Ok(())
 }
 
-async fn run_timers(timers: Vec<Timer>) {
-    for t in &timers {
+async fn run_timers(timers: &mut Vec<Timer>, mut pause_rx: Receiver<bool>) {
+    for t in timers {
         println!("starting {t:?}");
-        t.start().await;
+        let ct = t.start();
+        tokio::select! {
+            _ = ct => {
+            }
+            _ = pause_rx.recv() => {
+                dbg!("huh");
+                t.toggle_pause();
+            }
+        }
         println!("finished {t:?}");
     }
 }
