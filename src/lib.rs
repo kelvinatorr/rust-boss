@@ -7,6 +7,7 @@ use std::{num::ParseIntError, str::ParseBoolError};
 use tokio::sync::mpsc::Receiver;
 use tokio::time;
 use std::io::{Write, Stdout};
+use std::thread;
 
 #[derive(Debug)]
 pub struct ArgParseError {
@@ -110,8 +111,13 @@ impl<'a> Timer<'a> {
     }
 
     fn display_progress(&mut self) -> Result<(), Box<dyn Error>> {
-        write!(self.output, "Time Remaining: {}\r\n", self.time_remaining_ms/1000)?;
-        self.output.flush()?;
+        let msg = format!("Time Remaining: {}\r\n", self.time_remaining_ms/1000);
+        thread::scope(|s| {
+            s.spawn(|| {
+                write!(self.output, "{}", msg).unwrap();
+                self.output.flush().unwrap();
+            });
+        });
         Ok(())
     }
 
