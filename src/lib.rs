@@ -8,6 +8,9 @@ use tokio::sync::mpsc::Receiver;
 use tokio::time;
 use std::io::{Write, Stdout};
 use std::thread;
+// use crate::sound::Conductor;
+//
+// mod sound;
 
 #[derive(Debug)]
 pub struct ArgParseError {
@@ -132,6 +135,9 @@ pub async fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let mut paused = false;
 
     let stdout = std::io::stdout();
+    // let mut conductor = Conductor::new();
+    // conductor.play();
+
     // Create timers
     let gr_timer = Timer::new(config.get_ready.into(), &stdout);
     let first_timer = Timer::new(config.first_timer.into(), &stdout);
